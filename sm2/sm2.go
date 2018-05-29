@@ -261,7 +261,7 @@ func SignSm2(priv *PrivateKey, msg []byte) (r, s *big.Int, err error) {
 	var k *big.Int
 	e := new(big.Int).SetBytes(sm3Hash) //GetE
 
-	for { // 
+	for { //
 		for {
 			k, err = randFieldElementBytes(c, entropy)
 			if err != nil {

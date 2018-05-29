@@ -1,0 +1,37 @@
+ca:
+  cakey: ca.key
+
+cert:
+  OCSPServer:           
+    - http://ocsp.example.com
+  IssuingCertificateURL: 
+    - http://crt.example.com/ca1.crt
+  DNSNames:       
+    - test.example.com
+  EmailAddresses:
+    - gopher@golang.org
+  PermittedDNSDomains:
+    - .example.com
+    - example.com
+  CRLDistributionPoints: 
+    - http://crl1.example.com/ca1.crl
+    - http://crl2.example.com/ca1.crl
+  Subject:
+    Organization: TestDpt
+    CommonName: TestGM
+    Country:  China
+    ExtraNames:
+      Value: Gopher
+      Country: NL
+
+req:
+  PubicKey: pub.pem
+  PrivKey: prv.pem
+  Subject: 
+    CommonName: client
+    Organization: DevDpt
+
+
+  
+
+  

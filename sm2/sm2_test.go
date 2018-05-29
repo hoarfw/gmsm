@@ -84,7 +84,7 @@ func TestSm2(t *testing.T) {
 		fmt.Printf("Verify error\n")
 	} else {
 		fmt.Printf("Verify ok\n")
-	} 
+	}
 
 	ok = pubKey.Verify(msg, signdata) // 公钥验证
 	if ok != true {

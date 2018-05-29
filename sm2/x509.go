@@ -54,6 +54,8 @@ type pkixPublicKey struct {
 	BitString asn1.BitString
 }
 
+type SMPublicKeyInfo PublicKeyInfo
+
 // ParsePKIXPublicKey parses a DER encoded public key. These values are
 // typically found in PEM blocks with "BEGIN PUBLIC KEY".
 //
@@ -63,7 +65,7 @@ type pkixPublicKey struct {
 // On success, pub will be of type *rsa.PublicKey, *dsa.PublicKey,
 // or *ecdsa.PublicKey.
 func ParsePKIXPublicKey(derBytes []byte) (pub interface{}, err error) {
-	var pki publicKeyInfo
+	var pki PublicKeyInfo
 
 	if rest, err := asn1.Unmarshal(derBytes, &pki); err != nil {
 		return nil, err
@@ -75,6 +77,10 @@ func ParsePKIXPublicKey(derBytes []byte) (pub interface{}, err error) {
 		return nil, errors.New("x509: unknown public key algorithm")
 	}
 	return parsePublicKey(algo, &pki)
+}
+
+func MarshalPublicKey(pub interface{}) (publicKeyBytes []byte, publicKeyAlgorithm pkix.AlgorithmIdentifier, err error) {
+	return marshalPublicKey(pub)
 }
 
 func marshalPublicKey(pub interface{}) (publicKeyBytes []byte, publicKeyAlgorithm pkix.AlgorithmIdentifier, err error) {
@@ -165,7 +171,7 @@ type tbsCertificate struct {
 	Issuer             asn1.RawValue
 	Validity           validity
 	Subject            asn1.RawValue
-	PublicKey          publicKeyInfo
+	PublicKey          PublicKeyInfo
 	UniqueId           asn1.BitString   `asn1:"optional,tag:1"`
 	SubjectUniqueId    asn1.BitString   `asn1:"optional,tag:2"`
 	Extensions         []pkix.Extension `asn1:"optional,explicit,tag:3"`
@@ -185,7 +191,7 @@ type validity struct {
 	NotBefore, NotAfter time.Time
 }
 
-type publicKeyInfo struct {
+type PublicKeyInfo struct {
 	Raw       asn1.RawContent
 	Algorithm pkix.AlgorithmIdentifier
 	PublicKey asn1.BitString
@@ -452,6 +458,12 @@ var (
 	// but it's specified by ISO. Microsoft's makecert.exe has been known
 	// to produce certificates with this OID.
 	oidISOSignatureSHA1WithRSA = asn1.ObjectIdentifier{1, 3, 14, 3, 2, 29}
+
+	OidSignatureSM2WithSM3     = oidSignatureSM2WithSM3
+	OidNamedCurveP256SM2       = oidNamedCurveP256SM2
+	OidPublicKeyECDSA          = oidPublicKeyECDSA
+	OidExtensionSubjectAltName = oidExtensionSubjectAltName
+	OidExtensionRequest        = oidExtensionRequest
 )
 
 var signatureAlgorithmDetails = []struct {
@@ -1029,7 +1041,6 @@ func checkSignature(algo SignatureAlgorithm, signed, signature []byte, publicKey
 		switch pub.Curve {
 		case P256Sm2():
 
-
 			sm2PubKey := PublicKey{
 				Curve: pub.Curve,
 				X:     pub.X,
@@ -1103,7 +1114,7 @@ type distributionPointName struct {
 // asn1Null is the ASN.1 encoding of a NULL value.
 var asn1Null = []byte{5, 0}
 
-func parsePublicKey(algo PublicKeyAlgorithm, keyData *publicKeyInfo) (interface{}, error) {
+func parsePublicKey(algo PublicKeyAlgorithm, keyData *PublicKeyInfo) (interface{}, error) {
 	asn1Data := keyData.PublicKey.RightAlign()
 	switch algo {
 	case RSA:
@@ -1595,6 +1606,10 @@ var (
 	oidAuthorityInfoAccessIssuers = asn1.ObjectIdentifier{1, 3, 6, 1, 5, 5, 7, 48, 2}
 )
 
+func OidInExtensions(oid asn1.ObjectIdentifier, extensions []pkix.Extension) bool {
+	return oidInExtensions(oid, extensions)
+}
+
 // oidNotInExtensions returns whether an extension with the given oid exists in
 // extensions.
 func oidInExtensions(oid asn1.ObjectIdentifier, extensions []pkix.Extension) bool {
@@ -1604,6 +1619,10 @@ func oidInExtensions(oid asn1.ObjectIdentifier, extensions []pkix.Extension) boo
 		}
 	}
 	return false
+}
+
+func MarshalSANs(dnsNames, emailAddresses []string, ipAddresses []net.IP) (derBytes []byte, err error) {
+	return marshalSANs(dnsNames, emailAddresses, ipAddresses)
 }
 
 // marshalSANs marshals a list of addresses into a the contents of an X.509
@@ -1949,7 +1968,7 @@ func CreateCertificate(rand io.Reader, template, parent *Certificate, pub, priv 
 		Issuer:             asn1.RawValue{FullBytes: asn1Issuer},
 		Validity:           validity{template.NotBefore.UTC(), template.NotAfter.UTC()},
 		Subject:            asn1.RawValue{FullBytes: asn1Subject},
-		PublicKey:          publicKeyInfo{nil, publicKeyAlgorithm, encodedPublicKey},
+		PublicKey:          PublicKeyInfo{nil, publicKeyAlgorithm, encodedPublicKey},
 		Extensions:         extensions,
 	}
 
@@ -1959,7 +1978,6 @@ func CreateCertificate(rand io.Reader, template, parent *Certificate, pub, priv 
 	}
 
 	c.Raw = tbsCertContents
-
 
 	var signerOpts crypto.SignerOpts
 	signerOpts = hashFunc
@@ -1980,7 +1998,7 @@ func CreateCertificate(rand io.Reader, template, parent *Certificate, pub, priv 
 		signature, err = smPrvKey.Sign(nil, tbsCertContents, nil)
 
 	default:
-	
+
 		h := hashFunc.New()
 		h.Write(tbsCertContents)
 		digest := h.Sum(nil)
@@ -2136,17 +2154,18 @@ type CertificateRequest struct {
 // These structures reflect the ASN.1 structure of X.509 certificate
 // signature requests (see RFC 2986):
 
-type tbsCertificateRequest struct {
+type TbsCertificateRequest struct {
 	Raw           asn1.RawContent
 	Version       int
 	Subject       asn1.RawValue
-	PublicKey     publicKeyInfo
+	PublicKey     PublicKeyInfo
 	RawAttributes []asn1.RawValue `asn1:"tag:0"`
 }
 
+type SMCertificateRequest certificateRequest
 type certificateRequest struct {
 	Raw                asn1.RawContent
-	TBSCSR             tbsCertificateRequest
+	TBSCSR             TbsCertificateRequest
 	SignatureAlgorithm pkix.AlgorithmIdentifier
 	SignatureValue     asn1.BitString
 }
@@ -2155,8 +2174,12 @@ type certificateRequest struct {
 // extensions in a CSR.
 var oidExtensionRequest = asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 9, 14}
 
+func NewRawAttributes(attributes []pkix.AttributeTypeAndValueSET) ([]asn1.RawValue, error) {
+	return newRawAttributes(attributes)
+}
+
 // newRawAttributes converts AttributeTypeAndValueSETs from a template
-// CertificateRequest's Attributes into tbsCertificateRequest RawAttributes.
+// CertificateRequest's Attributes into TbsCertificateRequest RawAttributes.
 func newRawAttributes(attributes []pkix.AttributeTypeAndValueSET) ([]asn1.RawValue, error) {
 	var rawAttributes []asn1.RawValue
 	b, err := asn1.Marshal(attributes)
@@ -2337,10 +2360,10 @@ func CreateCertificateRequest(rand io.Reader, template *CertificateRequest, priv
 		return
 	}
 
-	tbsCSR := tbsCertificateRequest{
+	tbsCSR := TbsCertificateRequest{
 		Version: 0, // PKCS #10, RFC 2986
 		Subject: asn1.RawValue{FullBytes: asn1Subject},
-		PublicKey: publicKeyInfo{
+		PublicKey: PublicKeyInfo{
 			Algorithm: publicKeyAlgorithm,
 			PublicKey: asn1.BitString{
 				Bytes:     publicKeyBytes,
@@ -2366,7 +2389,7 @@ func CreateCertificateRequest(rand io.Reader, template *CertificateRequest, priv
 		signature, err = smPrvKey.Sign(nil, tbsCSRContents, nil)
 
 	default:
-		
+
 		h := hashFunc.New()
 		h.Write(tbsCSRContents)
 		digest := h.Sum(nil)
